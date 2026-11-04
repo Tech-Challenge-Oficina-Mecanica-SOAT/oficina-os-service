@@ -1,0 +1,12 @@
+.claude/
+.vs/
+.idea/
+bin/
+obj/
+[Tt]est[Rr]esults/
+coverage/
+*.user
+*.log
+.env
+*.tfstate*
+.terraform/
