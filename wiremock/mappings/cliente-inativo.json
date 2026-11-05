@@ -1,0 +1,14 @@
+{
+  "request": { "method": "GET", "urlPath": "/clientes/cpf/99999999999" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "nome": "Maria Inativa",
+      "cpf": "99999999999",
+      "email": "maria@teste.com",
+      "ativo": false
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "request": { "method": "GET", "urlPath": "/veiculos/placa/ABC1D23" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "placa": "ABC1D23",
+      "modelo": "Gol",
+      "marca": "Volkswagen",
+      "ano": 2020,
+      "clienteId": "11111111-1111-1111-1111-111111111111"
+    }
+  }
+}
