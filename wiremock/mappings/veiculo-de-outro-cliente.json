@@ -1,0 +1,15 @@
+{
+  "request": { "method": "GET", "urlPath": "/veiculos/placa/XYZ9K88" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "placa": "XYZ9K88",
+      "modelo": "Onix",
+      "marca": "Chevrolet",
+      "ano": 2022,
+      "clienteId": "22222222-2222-2222-2222-222222222222"
+    }
+  }
+}

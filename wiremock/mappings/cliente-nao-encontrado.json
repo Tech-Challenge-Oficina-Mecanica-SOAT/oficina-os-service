@@ -1,0 +1,5 @@
+{
+  "priority": 10,
+  "request": { "method": "GET", "urlPathPattern": "/clientes/cpf/.*" },
+  "response": { "status": 404 }
+}
