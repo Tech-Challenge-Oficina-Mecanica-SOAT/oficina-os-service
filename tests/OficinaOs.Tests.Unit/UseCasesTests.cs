@@ -28,6 +28,8 @@ internal sealed class InMemoryRepo : IOrdemServicoRepository
     public Task<IReadOnlyList<OrdemServico>> ListAsync(StatusOS? status, Guid? clienteId, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<OrdemServico>>(Itens
             .Where(o => (status is null || o.Status == status) && (clienteId is null || o.ClienteId == clienteId)).ToList());
+    public Task<IReadOnlyList<OrdemServico>> ListarCancelaveisDoClienteAsync(Guid clienteId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<OrdemServico>>(Itens.Where(o => o.ClienteId == clienteId && o.PodeCancelar).ToList());
     public Task SaveChangesAsync(CancellationToken ct = default) { Saves++; return Task.CompletedTask; }
 }
 

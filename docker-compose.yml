@@ -33,7 +33,8 @@ services:
       - ./localstack/init.sh:/etc/localstack/init/ready.d/init.sh:ro
     ports: ["4566:4566"]
     healthcheck:
-      test: ["CMD-SHELL", "awslocal sqs list-queues | grep -q oficina-local-spy"]
+      # a fila do OS e a ultima coisa criada pelo init.sh: saudavel = tudo pronto
+      test: ["CMD-SHELL", "awslocal sqs list-queues | grep -q oficina-local-os-queue"]
       interval: 3s
       retries: 40
 
@@ -53,6 +54,8 @@ services:
       Messaging__ServiceUrl: http://localstack:4566
       Messaging__Environment: local
       Messaging__PollIntervalSeconds: "1"
+      Messaging__QueueName: oficina-local-os-queue
+      Messaging__WaitTimeSeconds: "2"
       Messaging__TopicArns__os.criada: arn:aws:sns:us-east-1:000000000000:oficina-local-os-criada
       Messaging__TopicArns__os.cancelada: arn:aws:sns:us-east-1:000000000000:oficina-local-os-cancelada
       AWS_ACCESS_KEY_ID: test

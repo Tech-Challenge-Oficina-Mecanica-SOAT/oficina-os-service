@@ -13,6 +13,7 @@ public class OsDbContext : DbContext
     public DbSet<OrdemServicoItem> Itens => Set<OrdemServicoItem>();
     public DbSet<HistoricoStatusOS> Historicos => Set<HistoricoStatusOS>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
 
     /// <summary>
     /// Outbox Pattern: os eventos de domínio levantados pelas entidades viram linhas em outbox_events
@@ -50,6 +51,16 @@ public class OsDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<ProcessedEvent>(e =>
+        {
+            e.ToTable("processed_events");
+            e.HasKey(x => x.EventId);
+            e.Property(x => x.EventId).ValueGeneratedNever();
+            e.Property(x => x.EventType).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Outcome).HasMaxLength(20).IsRequired();
+            e.HasIndex(x => x.ProcessedAt);
+        });
+
         b.Entity<OutboxMessage>(e =>
         {
             e.ToTable("outbox_events");

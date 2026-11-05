@@ -25,5 +25,17 @@ public class OrdemServicoRepository : IOrdemServicoRepository
         return await query.OrderByDescending(o => o.CriadaEm).ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<OrdemServico>> ListarCancelaveisDoClienteAsync(Guid clienteId, CancellationToken ct = default)
+    {
+        var cancelaveis = new[]
+        {
+            StatusOS.AguardandoDiagnostico, StatusOS.EmDiagnostico, StatusOS.AguardandoAprovacao, StatusOS.Aprovada
+        };
+        return await _db.OrdensServico
+            .Include(o => o.Historico)
+            .Where(o => o.ClienteId == clienteId && cancelaveis.Contains(o.Status))
+            .ToListAsync(ct);
+    }
+
     public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }
