@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using OficinaOs.Domain.Common;
 using OficinaOs.Domain.Entities;
+using OficinaOs.Infrastructure.Messaging;
 
 namespace OficinaOs.Infrastructure.Persistence;
 
@@ -10,9 +12,55 @@ public class OsDbContext : DbContext
     public DbSet<OrdemServico> OrdensServico => Set<OrdemServico>();
     public DbSet<OrdemServicoItem> Itens => Set<OrdemServicoItem>();
     public DbSet<HistoricoStatusOS> Historicos => Set<HistoricoStatusOS>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
+    /// <summary>
+    /// Outbox Pattern: os eventos de domínio levantados pelas entidades viram linhas em outbox_events
+    /// DENTRO do mesmo SaveChanges (mesma transação) da mudança de estado. Ou grava tudo, ou nada.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        var entities = ChangeTracker.Entries<Entity>()
+            .Select(e => e.Entity)
+            .Where(e => e.DomainEvents.Count > 0)
+            .ToList();
+
+        if (entities.Count > 0)
+        {
+            var correlationId = IntegrationEventMapper.CurrentCorrelationId();
+            foreach (var evt in entities.SelectMany(e => e.DomainEvents))
+            {
+                var (eventType, envelope) = IntegrationEventMapper.ToEnvelope(evt, correlationId);
+                OutboxMessages.Add(new OutboxMessage
+                {
+                    Id = evt.EventId,
+                    EventType = eventType,
+                    Payload = envelope,
+                    OccurredAt = evt.OccurredAt
+                });
+            }
+        }
+
+        var result = await base.SaveChangesAsync(cancellationToken);
+
+        // Só limpa depois de salvar com sucesso: se falhar, os eventos continuam na entidade.
+        foreach (var entity in entities) entity.ClearEvents();
+        return result;
+    }
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<OutboxMessage>(e =>
+        {
+            e.ToTable("outbox_events");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.EventType).HasMaxLength(100).IsRequired();
+            e.Property(x => x.Payload).IsRequired();
+            e.Property(x => x.LastError).HasMaxLength(500);
+            e.HasIndex(x => new { x.ProcessedAt, x.OccurredAt });
+        });
+
         b.Entity<OrdemServico>(e =>
         {
             e.ToTable("ordens_servico");
