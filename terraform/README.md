@@ -14,7 +14,6 @@ terraform destroy -var environment=homolog
 Avisar o grupo depois do `apply`: "topics os.criada e os.cancelada no ar".
 
 O database lógico `oficina_os` e a role PostgreSQL ainda não estão aqui: dependem do repo `oficina-infra-db`.
-A fila SQS e a DLQ do OS entram na etapa 5.
 
 ## Fila e DLQ (etapa 5)
 
