@@ -14,7 +14,7 @@ Microsserviço de Ordem de Serviço e **orquestrador da Saga** do Tech Challenge
 | `feat/RafaelPacheco_Fase4_3` | REST + máquina de estados (Cadastros via Wiremock) | em revisão |
 | `feat/RafaelPacheco_Fase4_4` | Outbox + publicação SNS (os.criada, os.cancelada) | em revisão (PR empilhado sobre a _3) |
 | `feat/RafaelPacheco_Fase4_5` | Consumers SQS, dedupe por eventId e compensação | em revisão (empilhada sobre a _4) |
-| `feat/RafaelPacheco_Fase4_6` | BDD, Sonar, deploy K8s, New Relic | pendente |
+| `feat/RafaelPacheco_Fase4_6` | BDD (Reqnroll), gate de 80%, SonarCloud, manifestos K8s, deploy, Postman | em revisão (empilhada sobre a _5) |
 
 ## Rodar
 
@@ -84,3 +84,11 @@ Simular os outros serviços localmente (com `docker compose up`):
 scripts/fake-event.sh diagnostico.concluido '{"osId":"<ID>","diagnosticoId":"11111111-0000-0000-0000-000000000001"}'
 scripts/fake-event.sh orcamento.recusado    '{"osId":"<ID>","orcamentoId":"22222222-0000-0000-0000-000000000002"}'
 ```
+
+## Qualidade, BDD e demonstração
+
+- **BDD (Reqnroll):** `tests/OficinaOs.Tests.BDD/Features/SagaOrdemServico.feature` — 8 cenários em português (Saga feliz, recusa de orçamento, pagamento recusado, cliente desativado, evento duplicado, evento fora de ordem, cancelamento proibido em reparo, cliente inativo). Sobem a API de verdade com Wiremock no papel do Cadastros.
+- **Testes:** 101 unitários + 8 BDD. **Cobertura de linhas ≈ 88%**; o CI falha o PR abaixo de 80% e roda o SonarCloud (ver [docs/DEPLOY.md](docs/DEPLOY.md)).
+- **Demonstração local** (com `docker compose up --build -d`): `scripts/demo-happy-path.sh` (Saga completa) e `scripts/demo-rollback.sh` (compensação + idempotência).
+- **Contrato REST:** [docs/openapi.yaml](docs/openapi.yaml) · **Postman:** [docs/postman/](docs/postman/oficina-os-service.postman_collection.json).
+- **Deploy Kubernetes, SonarCloud e New Relic:** [docs/DEPLOY.md](docs/DEPLOY.md); manifestos em [k8s/](k8s/).

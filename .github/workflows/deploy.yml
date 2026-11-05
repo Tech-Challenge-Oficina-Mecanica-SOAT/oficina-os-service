@@ -1,0 +1,45 @@
+name: Deploy
+
+# Deploy manual (homolog ou prod) de uma imagem já publicada pelo CI.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ambiente"
+        required: true
+        default: "homolog"
+        type: choice
+        options: [ homolog, prod ]
+      image_tag:
+        description: "Tag da imagem no GHCR (ex.: sha-1a2b3c4 ou latest)"
+        required: true
+        default: "latest"
+
+jobs:
+  deploy:
+    name: Deploy Kubernetes (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credenciais AWS (Academy)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Deploy
+        env:
+          IMAGE: ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:${{ inputs.image_tag }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+        run: ./scripts/deploy-k8s.sh ${{ inputs.environment }}

@@ -10,3 +10,6 @@ coverage/
 .env
 *.tfstate*
 .terraform/
+
+# Gerado pelo Reqnroll a cada build
+*.feature.cs
