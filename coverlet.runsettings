@@ -4,7 +4,8 @@
     <DataCollectors>
       <DataCollector friendlyName="XPlat Code Coverage">
         <Configuration>
-          <Format>cobertura</Format>
+          <!-- cobertura: gate de 80% e relatório; opencover: SonarCloud -->
+          <Format>cobertura,opencover</Format>
           <Exclude>[*]Microsoft.AspNetCore.OpenApi.Generated,[OficinaOs.Infrastructure]OficinaOs.Infrastructure.Persistence.Migrations.*</Exclude>
         </Configuration>
       </DataCollector>

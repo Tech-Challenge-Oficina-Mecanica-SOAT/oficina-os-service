@@ -1,0 +1,23 @@
+# Configuração NÃO sensível do OS Service. Os ${...} são preenchidos por scripts/deploy-k8s.sh (envsubst).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: os-service-config
+  namespace: oficina
+  labels:
+    app.kubernetes.io/name: os-service
+    app.kubernetes.io/component: orquestrador-saga
+    app.kubernetes.io/part-of: oficina-mecanica
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  Logging__LogLevel__Default: "Information"
+  # Cadastros Service (REST). Vem do Parameter Store /oficina/{env}/services/cadastros/api-url
+  Cadastros__BaseUrl: "${CADASTROS_URL}"
+  # Mensageria SNS/SQS (fila oficina-{env}-os-queue, criada pelo terraform/ deste repo)
+  Messaging__Enabled: "true"
+  Messaging__Environment: "${ENVIRONMENT}"
+  Messaging__Region: "us-east-1"
+  # Aplica as migrations do EF no startup (o EF usa lock: seguro com várias réplicas)
+  Database__MigrateOnStartup: "true"
+  NEW_RELIC_APP_NAME: "oficina-os-service"
+  NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: "true"

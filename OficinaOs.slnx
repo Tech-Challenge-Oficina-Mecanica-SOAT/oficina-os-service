@@ -6,6 +6,7 @@
     <Project Path="src/OficinaOs.Infrastructure/OficinaOs.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/OficinaOs.Tests.BDD/OficinaOs.Tests.BDD.csproj" />
     <Project Path="tests/OficinaOs.Tests.Unit/OficinaOs.Tests.Unit.csproj" />
   </Folder>
 </Solution>
