@@ -15,3 +15,8 @@ Avisar o grupo depois do `apply`: "topics os.criada e os.cancelada no ar".
 
 O database lógico `oficina_os` e a role PostgreSQL ainda não estão aqui: dependem do repo `oficina-infra-db`.
 A fila SQS e a DLQ do OS entram na etapa 5.
+
+## Fila e DLQ (etapa 5)
+
+`sqs.tf` cria `oficina-{env}-os-queue` (+ `oficina-{env}-os-dlq`, 3 tentativas), a policy que deixa os tópicos publicarem na fila e as subscriptions (`raw_message_delivery = true`) lendo os ARNs no Parameter Store.
+O `apply` exige que os tópicos dos outros serviços já existam; enquanto isso, restrinja: `terraform apply -var environment=homolog -var 'consumed_events=["diagnostico.concluido"]'`.

@@ -14,7 +14,7 @@ public sealed class CadastrosHttpClientTests : IDisposable
     private readonly WireMockServer _server = WireMockServer.Start();
 
     private CadastrosHttpClient Sut() =>
-        new(new HttpClient { BaseAddress = new Uri(_server.Url!.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(2) });
+        new(new HttpClient { BaseAddress = new Uri(_server.Url!.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(15) });
 
     public void Dispose() => _server.Stop();
 

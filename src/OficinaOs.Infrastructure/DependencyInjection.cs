@@ -1,6 +1,7 @@
 using Amazon;
 using Amazon.SimpleNotificationService;
 using Amazon.SimpleSystemsManagement;
+using Amazon.SQS;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -54,6 +55,19 @@ public static class DependencyInjection
             if (!string.IsNullOrWhiteSpace(o.ServiceUrl)) cfg.ServiceURL = o.ServiceUrl;
             return new AmazonSimpleSystemsManagementClient(cfg);
         });
+
+        services.AddSingleton<IAmazonSQS>(sp =>
+        {
+            var o = sp.GetRequiredService<IOptions<MessagingOptions>>().Value;
+            var cfg = new AmazonSQSConfig { RegionEndpoint = RegionEndpoint.GetBySystemName(o.Region) };
+            if (!string.IsNullOrWhiteSpace(o.ServiceUrl)) cfg.ServiceURL = o.ServiceUrl;
+            return new AmazonSQSClient(cfg);
+        });
+
+        // Consumo: dedupe + handler da Saga + leitura da fila
+        services.AddScoped<IProcessedEventStore, ProcessedEventStore>();
+        services.AddSingleton<SqsMessageProcessor>();
+        services.AddHostedService<SqsConsumer>();
 
         services.AddSingleton<ITopicArnResolver, TopicArnResolver>();
         services.AddSingleton<IEventPublisher, SnsEventPublisher>();

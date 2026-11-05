@@ -14,11 +14,6 @@ provider "aws" {
 # do Parameter Store mantém o nome original do evento — é por ele que os consumidores descobrem o ARN.
 locals {
   topics = toset(["os.criada", "os.cancelada"])
-}
-
-resource "aws_sns_topic" "os" {
-  for_each = local.topics
-  name     = "oficina-${var.environment}-${replace(each.key, ".", "-")}"
 
   tags = {
     Project   = "oficina-mecanica"
@@ -26,6 +21,13 @@ resource "aws_sns_topic" "os" {
     Env       = var.environment
     ManagedBy = "terraform"
   }
+}
+
+resource "aws_sns_topic" "os" {
+  for_each = local.topics
+  name     = "oficina-${var.environment}-${replace(each.key, ".", "-")}"
+
+  tags = local.tags
 }
 
 resource "aws_ssm_parameter" "topic_arn" {

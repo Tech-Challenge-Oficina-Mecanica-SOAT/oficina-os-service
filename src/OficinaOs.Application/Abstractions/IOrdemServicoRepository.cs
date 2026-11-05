@@ -12,5 +12,8 @@ public interface IOrdemServicoRepository
 
     Task<IReadOnlyList<OrdemServico>> ListAsync(StatusOS? status, Guid? clienteId, CancellationToken ct = default);
 
+    /// <summary>OSes do cliente que ainda podem ser canceladas, já rastreadas (com histórico) para alteração.</summary>
+    Task<IReadOnlyList<OrdemServico>> ListarCancelaveisDoClienteAsync(Guid clienteId, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }
