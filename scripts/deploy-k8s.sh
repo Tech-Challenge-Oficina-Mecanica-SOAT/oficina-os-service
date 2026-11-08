@@ -8,7 +8,7 @@
 #   IMAGE                  imagem a publicar (padrão: ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:latest)
 #   GHCR_USERNAME/GHCR_PAT credencial para puxar a imagem privada do GHCR (cria o secret ghcr-pull-secret)
 #   NEW_RELIC_LICENSE_KEY  chave do New Relic (vazio = agente carrega mas não reporta)
-#   OS_DB_NAME             database lógico da OS (padrão: oficina_os) — PRECISA existir (ver docs/DEPLOY.md)
+#   OS_DB_NAME             database lógico da OS (padrão: oficina_os) — criado sozinho pelo EF Migrate no 1º start (usuário admin)
 #   OS_DB_USER / OS_DB_PASSWORD   credenciais do banco da OS; se vazios, usa as do RDS compartilhado (SSM + Secrets Manager)
 #   CADASTROS_URL          URL do Cadastros; se vazia, lê o Parameter Store /oficina/{env}/services/cadastros/api-url
 #

@@ -47,8 +47,10 @@ IMAGE=ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:latest ./s
 ```
 
 ### Pré-requisitos que NÃO são deste repo
-- **Database `oficina_os`** no RDS compartilhado (e, idealmente, role própria). Vem do repo `oficina-infra-db`. Até lá, criar manualmente
-  (`CREATE DATABASE oficina_os;`) e, se houver role própria, informar `OS_DB_USER`/`OS_DB_PASSWORD`. Sem o database, o pod não sobe (migration falha).
+- **Database `oficina_os`**: **nao precisa criar**. Com `Database__MigrateOnStartup=true` (padrao no `k8s/configmap.yaml`) e o usuario admin do RDS
+  (`oficina_admin`, que tem permissao de CREATEDB), o `Migrate()` do EF Core cria o database e as tabelas no primeiro start do pod (validado: banco inexistente
+  -> API sobe, cria `oficina_os` e aplica as migrations). E o mesmo padrao de EF migrations dos outros servicos. O `deploy-k8s.sh` usa o admin por padrao;
+  para role propria, informar `OS_DB_USER`/`OS_DB_PASSWORD` (a role precisa de CREATEDB ou o database ja deve existir).
 - **Topics e fila**: `terraform apply` deste repo (tópicos `os.criada`/`os.cancelada`, fila `oficina-{env}-os-queue` + DLQ). A fila só recebe eventos
   dos tópicos dos outros serviços depois que eles existirem (ver `terraform/README.md`).
 - **Cluster**: a Fase 3 roda em 1 node `t3.small` (limite de ~11 pods). Um segundo serviço + New Relic ocupam pods: conferir `kubectl get pods -A`.
