@@ -173,6 +173,31 @@ namespace OficinaOs.Infrastructure.Persistence.Migrations
                     b.ToTable("outbox_events", (string)null);
                 });
 
+            modelBuilder.Entity("OficinaOs.Infrastructure.Persistence.ProcessedEvent", b =>
+                {
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("EventId");
+
+                    b.HasIndex("ProcessedAt");
+
+                    b.ToTable("processed_events", (string)null);
+                });
+
             modelBuilder.Entity("OficinaOs.Domain.Entities.HistoricoStatusOS", b =>
                 {
                     b.HasOne("OficinaOs.Domain.Entities.OrdemServico", null)

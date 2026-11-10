@@ -13,7 +13,7 @@ Microsserviço de Ordem de Serviço e **orquestrador da Saga** do Tech Challenge
 | `feat/RafaelPacheco_Fase4_2` | Bootstrap: solução, entidades, Dockerfile, CI, OpenAPI | concluída (PR #1) |
 | `feat/RafaelPacheco_Fase4_3` | REST + máquina de estados (Cadastros via Wiremock) | em revisão |
 | `feat/RafaelPacheco_Fase4_4` | Outbox + publicação SNS (os.criada, os.cancelada) | em revisão (PR empilhado sobre a _3) |
-| `feat/RafaelPacheco_Fase4_5` | Consumers SQS + compensação | pendente |
+| `feat/RafaelPacheco_Fase4_5` | Consumers SQS, dedupe por eventId e compensação | em revisão (empilhada sobre a _4) |
 | `feat/RafaelPacheco_Fase4_6` | BDD, Sonar, deploy K8s, New Relic | pendente |
 
 ## Rodar
@@ -55,3 +55,32 @@ docker compose exec localstack awslocal sqs receive-message --queue-url http://s
 ```
 
 Terraform dos tópicos e dos parâmetros: [terraform/](terraform/).
+
+## Consumo de eventos (SQS) e compensação
+
+O `SqsConsumer` lê `oficina-{env}-os-queue` (long polling) e entrega cada mensagem ao `IncomingEventHandler`, que decide o próximo estado da OS (orquestração da Saga).
+
+| Evento recebido | Efeito na OS |
+|---|---|
+| `diagnostico.concluido` | `AguardandoDiagnostico → EmDiagnostico` (guarda `diagnosticoId`) |
+| `orcamento.gerado` | `→ AguardandoAprovacao` (guarda `orcamentoId`) |
+| `orcamento.aprovado` | `→ Aprovada` |
+| `execucao.iniciada` | `→ EmReparo` |
+| `execucao.finalizada` | `→ AguardandoPagamento` |
+| `pagamento.confirmado` | `→ Concluida` (também resolve `PendenteCobranca`) |
+| `pagamento.recusado` | `→ PendenteCobranca` (não cancela) |
+| `orcamento.recusado` | **compensação:** `→ Cancelada` e publica `os.cancelada` (`orcamento_recusado`) |
+| `cliente.desativado` | **compensação:** cancela as OSes canceláveis do cliente e publica `os.cancelada` (`cliente_desativado`) |
+
+- **Idempotência:** o `eventId` é gravado em `processed_events` na mesma transação da mudança; entrega repetida é ignorada.
+- **Evento fora de ordem / sem efeito** (transição inválida, OS inexistente, tipo desconhecido): registrado e descartado (log + ack), sem ir para a DLQ.
+- **Mensagem malformada ou falha técnica:** a mensagem não é apagada; após 3 recebimentos a redrive policy a envia para `oficina-{env}-os-dlq`.
+- **Rastreamento:** o `correlationId` do evento recebido vira o trace da operação; o `os.cancelada` gerado sai com o mesmo trace.
+- Aceita o envelope direto (subscription com `raw_message_delivery=true`) e o embrulhado pelo SNS.
+
+Simular os outros serviços localmente (com `docker compose up`):
+
+```bash
+scripts/fake-event.sh diagnostico.concluido '{"osId":"<ID>","diagnosticoId":"11111111-0000-0000-0000-000000000001"}'
+scripts/fake-event.sh orcamento.recusado    '{"osId":"<ID>","orcamentoId":"22222222-0000-0000-0000-000000000002"}'
+```

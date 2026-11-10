@@ -21,6 +21,17 @@ public class MessagingOptions
     /// <summary>Depois de N falhas a mensagem é "estacionada" (para de tentar) e fica registrada em LastError.</summary>
     public int MaxAttempts { get; set; } = 10;
 
+    /// <summary>URL da fila do OS (consumo). Vazio = resolve pelo QueueName.</summary>
+    public string? QueueUrl { get; set; }
+
+    /// <summary>Nome da fila do OS. Vazio = oficina-{Environment}-os-queue.</summary>
+    public string? QueueName { get; set; }
+
+    /// <summary>Long polling do SQS (0-20s).</summary>
+    public int WaitTimeSeconds { get; set; } = 10;
+
+    public int MaxMessages { get; set; } = 10;
+
     /// <summary>Sobrescreve a descoberta por Parameter Store: { "os.criada": "arn:aws:sns:..." }.</summary>
     public Dictionary<string, string> TopicArns { get; set; } = new();
 }
