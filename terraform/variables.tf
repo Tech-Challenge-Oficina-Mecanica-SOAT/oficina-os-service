@@ -31,7 +31,7 @@ variable "region" {
 }
 
 variable "node_role_name" {
-  description = "Role dos nodes do EKS, que os pods herdam (AWS Academy: LabEksNodeRole). Recebe as policies de recurso do SNS e da SQS."
+  description = "Nome da role dos nodes do EKS, que os pods herdam. Vazio = descobre por regex a role com LabEksNodeRole no nome (AWS Academy, que gera prefixo e sufixo aleatórios). Recebe as policies de recurso do SNS e da SQS."
   type        = string
-  default     = "LabEksNodeRole"
+  default     = ""
 }

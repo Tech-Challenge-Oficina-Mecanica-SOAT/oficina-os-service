@@ -11,6 +11,8 @@
 #   OS_DB_NAME             database lógico da OS (padrão: oficina_os) — criado sozinho pelo EF Migrate no 1º start (usuário admin)
 #   OS_DB_USER / OS_DB_PASSWORD   credenciais do banco da OS; se vazios, usa as do RDS compartilhado (SSM + Secrets Manager)
 #   CADASTROS_URL          URL do Cadastros; se vazia, lê o Parameter Store /oficina/{env}/services/cadastros/api-url
+#   OS_SERVICE_INTERNAL    true = Service ClusterIP (k8s/service-internal.yaml), sem NLB público: não espera o NLB e publica
+#                          http://oficina-os-service.oficina.svc.cluster.local no SSM (padrão: false = NLB internet-facing)
 #
 # IAM do AWS Academy: os pods herdam a role do node (LabEksNodeRole). SNS e SQS são liberados por policy de recurso
 # (terraform/iam.tf e sqs.tf); SSM não tem policy de recurso, então ARNs e URL da fila vão por variável (abaixo).
@@ -93,25 +95,35 @@ fi
 export ENVIRONMENT CADASTROS_URL IMAGE
 envsubst '${ENVIRONMENT} ${CADASTROS_URL}' < k8s/configmap.yaml | kubectl apply -f -
 envsubst '${IMAGE}' < k8s/deployment.yaml | kubectl apply -f -
-kubectl apply -f k8s/service.yaml -f k8s/hpa.yaml
+if [ "${OS_SERVICE_INTERNAL:-false}" = "true" ]; then
+  kubectl apply -f k8s/service-internal.yaml -f k8s/hpa.yaml
+else
+  kubectl apply -f k8s/service.yaml -f k8s/hpa.yaml
+fi
 
 # O Secret é lido na criação do pod: reinicia para pegar credenciais/connection string novas.
 kubectl rollout restart deployment/oficina-os-service -n "$NS"
 kubectl rollout status deployment/oficina-os-service -n "$NS" --timeout=5m
 
 # --- Publica o endpoint para Billing/Execução (contratos/eventos/schemas.md) ---------------------------
-echo "Aguardando o NLB provisionar..."
-LB_HOSTNAME=""
-for _ in $(seq 1 18); do
-  LB_HOSTNAME=$(kubectl get svc oficina-os-service -n "$NS" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-  [ -n "$LB_HOSTNAME" ] && break
-  sleep 10
-done
-if [ -z "$LB_HOSTNAME" ]; then
-  echo "NLB ainda sem hostname. Rode 'kubectl get svc oficina-os-service -n $NS' e publique manualmente em /oficina/$ENVIRONMENT/services/os/api-url." >&2
-  exit 1
+if [ "${OS_SERVICE_INTERNAL:-false}" = "true" ]; then
+  # Sem NLB: o contrato do SSM é mantido, apontando para o DNS interno do Service.
+  SERVICE_URL="http://oficina-os-service.${NS}.svc.cluster.local"
+else
+  echo "Aguardando o NLB provisionar..."
+  LB_HOSTNAME=""
+  for _ in $(seq 1 18); do
+    LB_HOSTNAME=$(kubectl get svc oficina-os-service -n "$NS" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+    [ -n "$LB_HOSTNAME" ] && break
+    sleep 10
+  done
+  if [ -z "$LB_HOSTNAME" ]; then
+    echo "NLB ainda sem hostname. Rode 'kubectl get svc oficina-os-service -n $NS' e publique manualmente em /oficina/$ENVIRONMENT/services/os/api-url." >&2
+    exit 1
+  fi
+  SERVICE_URL="http://$LB_HOSTNAME"
 fi
 aws ssm put-parameter --name "/oficina/$ENVIRONMENT/services/os/api-url" --type String \
-  --value "http://$LB_HOSTNAME" --overwrite >/dev/null
+  --value "$SERVICE_URL" --overwrite >/dev/null
 
-echo "Deploy concluído. OS Service: http://$LB_HOSTNAME  (health: /health/ready)"
+echo "Deploy concluído. OS Service: $SERVICE_URL  (health: /health/ready)"
