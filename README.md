@@ -3,18 +3,26 @@
 Microsserviço de Ordem de Serviço e **orquestrador da Saga** do Tech Challenge Fase 4 (FIAP SOAT).
 
 - **Stack:** .NET 10, Clean Architecture (Domain / Application / Infrastructure / API), PostgreSQL (`oficina_os`).
-- **Contrato REST:** [docs/openapi.yaml](docs/openapi.yaml).
-- **Mensageria:** SNS/SQS (publica `os.criada`, `os.cancelada`; consome 9 eventos) — a partir das próximas etapas.
+- **Contrato REST:** [docs/openapi.yaml](docs/openapi.yaml) · **Postman:** [docs/postman/](docs/postman/oficina-os-service.postman_collection.json).
+- **Mensageria:** SNS/SQS (publica `os.criada`, `os.cancelada`; consome 9 eventos) com Outbox, idempotência e DLQ.
+- **Arquitetura:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (diagramas) · **Deploy:** [docs/DEPLOY.md](docs/DEPLOY.md).
 
-## Status por etapa (um PR por etapa)
+## Saga: estratégia e justificativa
 
-| Branch | Etapa | Status |
-|---|---|---|
-| `feat/RafaelPacheco_Fase4_2` | Bootstrap: solução, entidades, Dockerfile, CI, OpenAPI | concluída (PR #1) |
-| `feat/RafaelPacheco_Fase4_3` | REST + máquina de estados (Cadastros via Wiremock) | em revisão |
-| `feat/RafaelPacheco_Fase4_4` | Outbox + publicação SNS (os.criada, os.cancelada) | em revisão (PR empilhado sobre a _3) |
-| `feat/RafaelPacheco_Fase4_5` | Consumers SQS, dedupe por eventId e compensação | em revisão (empilhada sobre a _4) |
-| `feat/RafaelPacheco_Fase4_6` | BDD (Reqnroll), gate de 80%, SonarCloud, manifestos K8s, deploy, Postman | em revisão (empilhada sobre a _5) |
+**Saga orquestrada**, com o orquestrador neste serviço (decisão global do grupo: [ADR 0004 do Billing](https://github.com/Tech-Challenge-Oficina-Mecanica-SOAT/oficina-billing-service/blob/main/docs/adrs/0004-saga-orquestrado-vs-coreografado.md); detalhes e alternativas em [ADR 0001](docs/adr/0001-saga-orquestrada.md)).
+
+- **Por que orquestrada:** o fluxo (abrir → diagnosticar → orçar → aprovar → executar → pagar) é linear, com poucos serviços e compensação bem definida. Um ponto central que conhece o estado da OS facilita depurar e rastrear; na coreografia, a regra "e se o orçamento for recusado?" ficaria espalhada nos 4 serviços.
+- **Como funciona:** os outros serviços só publicam fatos (`diagnostico.concluido`, `orcamento.*`, `execucao.*`, `pagamento.*`); o OS decide o próximo estado e publica `os.criada`/`os.cancelada`.
+- **Compensação (rollback seguro):** `orcamento.recusado`, `cliente.desativado` ou cancelamento manual levam a OS a `Cancelada` (permitido até `Aprovada`) e publicam `os.cancelada`, que faz o Billing cancelar/estornar e a Execução liberar a fila. `pagamento.recusado` leva a `PendenteCobranca` (o serviço já foi feito).
+- **Custo aceito:** o OS vira ponto de coordenação. Mitigado por Outbox, idempotência por `eventId` e DLQ.
+
+## Qualidade e evidências
+
+- **Testes:** 101 unitários + 8 cenários BDD (Reqnroll). **Cobertura de linhas ≈ 88%**; o CI reprova o PR abaixo de 80%.
+- **Evidência de CI (build, testes e cobertura verdes no PR #6):** [execução do pull request](https://github.com/Tech-Challenge-Oficina-Mecanica-SOAT/oficina-os-service/pull/6/checks); o relatório fica no artifact `coverage-report` de cada execução.
+
+  ![CI verde no PR #6](docs/evidencias/ci-build-test-verde.png)
+- **SonarCloud:** a análise roda no CI quando `SONAR_TOKEN`, `SONAR_ORGANIZATION` e `SONAR_PROJECT_KEY` estão configurados (ver [docs/DEPLOY.md](docs/DEPLOY.md)).
 
 ## Rodar
 
@@ -25,7 +33,6 @@ docker build -t oficina-os-service .
 ```
 
 Health: `GET /health/live`, `GET /health/ready`.
-# oficina-os-service
 
 ## Rodar localmente com Wiremock (sem o Cadastros real)
 
@@ -88,7 +95,6 @@ scripts/fake-event.sh orcamento.recusado    '{"osId":"<ID>","orcamentoId":"22222
 ## Qualidade, BDD e demonstração
 
 - **BDD (Reqnroll):** `tests/OficinaOs.Tests.BDD/Features/SagaOrdemServico.feature` — 8 cenários em português (Saga feliz, recusa de orçamento, pagamento recusado, cliente desativado, evento duplicado, evento fora de ordem, cancelamento proibido em reparo, cliente inativo). Sobem a API de verdade com Wiremock no papel do Cadastros.
-- **Testes:** 101 unitários + 8 BDD. **Cobertura de linhas ≈ 88%**; o CI falha o PR abaixo de 80% e roda o SonarCloud (ver [docs/DEPLOY.md](docs/DEPLOY.md)).
 - **Demonstração local** (com `docker compose up --build -d`): `scripts/demo-happy-path.sh` (Saga completa) e `scripts/demo-rollback.sh` (compensação + idempotência).
 - **Contrato REST:** [docs/openapi.yaml](docs/openapi.yaml) · **Postman:** [docs/postman/](docs/postman/oficina-os-service.postman_collection.json).
 - **Deploy Kubernetes, SonarCloud e New Relic:** [docs/DEPLOY.md](docs/DEPLOY.md); manifestos em [k8s/](k8s/).

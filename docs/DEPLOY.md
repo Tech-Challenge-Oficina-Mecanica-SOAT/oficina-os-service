@@ -9,6 +9,7 @@
 | **Deploy Kubernetes (homolog)** | push em `main` **se** `vars.DEPLOY_HOMOLOG == 'true'` | `scripts/deploy-k8s.sh homolog` com a imagem `sha-xxxxxxx` |
 
 Deploy manual (homolog ou prod, qualquer tag): workflow **Deploy** (`deploy.yml`, "Run workflow").
+**Deploy automático em homolog:** o `deploy.yml` também dispara quando o CI/CD da `main` termina com sucesso (testes, cobertura e Sonar já passaram) e publica a imagem `sha-xxxxxxx` do commit. Fica desligado até existir a variável do repositório `AUTO_DEPLOY=true` (Settings → Secrets and variables → Actions → Variables), porque as credenciais do AWS Academy expiram em ~4h: ligue só com o ambiente de pé e os secrets atualizados.
 
 > Os PRs exigem o check **Build & Test** (branch protection da `main`): código com teste quebrado ou cobertura < 80% não entra.
 
