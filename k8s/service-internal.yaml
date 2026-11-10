@@ -1,0 +1,19 @@
+# Variante opt-in (OS_SERVICE_INTERNAL=true no scripts/deploy-k8s.sh): Service interno, sem NLB.
+# Mesmo nome e porta do k8s/service.yaml, então o DNS do cluster continua o mesmo.
+apiVersion: v1
+kind: Service
+metadata:
+  name: oficina-os-service
+  namespace: oficina
+  labels:
+    app.kubernetes.io/name: os-service
+    app.kubernetes.io/component: orquestrador-saga
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: os-service
+  ports:
+    - port: 80
+      targetPort: 5000
+      name: http
