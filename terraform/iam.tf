@@ -5,8 +5,26 @@
 
 data "aws_caller_identity" "current" {}
 
+# No Academy a role tem prefixo e sufixo aleatórios (ex.: c2343...-LabEksNodeRole-rDrKZ4rdrWfL), então é descoberta por regex.
+# `node_role_name` não vazio tem precedência.
+data "aws_iam_roles" "node" {
+  count      = var.node_role_name == "" ? 1 : 0
+  name_regex = ".*LabEksNodeRole.*"
+}
+
+locals {
+  node_role_name = var.node_role_name != "" ? var.node_role_name : try(tolist(data.aws_iam_roles.node[0].names)[0], "")
+}
+
 data "aws_iam_role" "node" {
-  name = var.node_role_name
+  name = local.node_role_name
+
+  lifecycle {
+    precondition {
+      condition     = local.node_role_name != ""
+      error_message = "Nenhuma role com nome contendo LabEksNodeRole foi encontrada. Informe -var node_role_name=<nome da role dos nodes do EKS>."
+    }
+  }
 }
 
 # Publicação: os pods (role do node) podem publicar nos tópicos do OS.
