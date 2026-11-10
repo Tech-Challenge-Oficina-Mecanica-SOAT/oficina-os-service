@@ -1,0 +1,5 @@
+{
+  "priority": 10,
+  "request": { "method": "GET", "urlPathPattern": "/veiculos/placa/.*" },
+  "response": { "status": 404 }
+}

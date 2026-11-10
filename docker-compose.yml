@@ -1,0 +1,64 @@
+# Ambiente local do OS Service:
+#   API + Postgres + Wiremock (simula o Cadastros do Pedro) + LocalStack (simula SNS/SQS da AWS).
+#
+#   docker compose up --build
+#   API:      http://localhost:8080      Wiremock (admin): http://localhost:8081/__admin/mappings
+#   LocalStack: http://localhost:4566    (fila "espia" oficina-local-spy recebe tudo que a API publica no SNS)
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: oficina_os
+      POSTGRES_USER: os_service_user
+      POSTGRES_PASSWORD: os_local_pwd
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U os_service_user -d oficina_os"]
+      interval: 3s
+      retries: 20
+
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    command: ["--verbose"]
+    volumes:
+      - ./wiremock/mappings:/home/wiremock/mappings:ro
+    ports: ["8081:8080"]
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: sns,sqs,ssm
+      DEBUG: "0"
+    volumes:
+      - ./localstack/init.sh:/etc/localstack/init/ready.d/init.sh:ro
+    ports: ["4566:4566"]
+    healthcheck:
+      # a fila do OS e a ultima coisa criada pelo init.sh: saudavel = tudo pronto
+      test: ["CMD-SHELL", "awslocal sqs list-queues | grep -q oficina-local-os-queue"]
+      interval: 3s
+      retries: 40
+
+  os-service:
+    build: .
+    depends_on:
+      postgres: { condition: service_healthy }
+      wiremock: { condition: service_started }
+      localstack: { condition: service_healthy }
+    environment:
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=oficina_os;Username=os_service_user;Password=os_local_pwd
+      Cadastros__BaseUrl: http://wiremock:8080
+      Database__MigrateOnStartup: "true"
+      # Mensageria apontando para o LocalStack (credenciais fictícias aceitas por ele)
+      Messaging__Enabled: "true"
+      Messaging__ServiceUrl: http://localstack:4566
+      Messaging__Environment: local
+      Messaging__PollIntervalSeconds: "1"
+      Messaging__QueueName: oficina-local-os-queue
+      Messaging__WaitTimeSeconds: "2"
+      Messaging__TopicArns__os.criada: arn:aws:sns:us-east-1:000000000000:oficina-local-os-criada
+      Messaging__TopicArns__os.cancelada: arn:aws:sns:us-east-1:000000000000:oficina-local-os-cancelada
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    ports: ["8080:5000"]
