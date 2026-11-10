@@ -29,3 +29,9 @@ variable "region" {
   type        = string
   default     = "us-east-1"
 }
+
+variable "node_role_name" {
+  description = "Role dos nodes do EKS, que os pods herdam (AWS Academy: LabEksNodeRole). Recebe as policies de recurso do SNS e da SQS."
+  type        = string
+  default     = "LabEksNodeRole"
+}
