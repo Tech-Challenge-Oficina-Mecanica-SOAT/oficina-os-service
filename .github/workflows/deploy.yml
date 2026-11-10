@@ -48,9 +48,19 @@ jobs:
 
       - uses: azure/setup-kubectl@v4
 
+      - name: Define a tag da imagem
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # manual: tag informada; automático: sha-<7 primeiros caracteres do commit> (mesmo formato do CI)
+          if [ -n "$INPUT_TAG" ]; then TAG="$INPUT_TAG"; else TAG="sha-${HEAD_SHA:0:7}"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Deploy
         env:
-          IMAGE: ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:${{ inputs.image_tag || format('sha-{0}', substr(github.event.workflow_run.head_sha, 0, 7)) }}
+          IMAGE: ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:${{ steps.tag.outputs.tag }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
