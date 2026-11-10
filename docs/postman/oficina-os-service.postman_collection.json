@@ -1,0 +1,114 @@
+{
+  "info": {
+    "name": "OS Service — Oficina Mecânica (Fase 4)",
+    "description": "Coleção do OS Service (orquestrador da Saga). Variável baseUrl: local = http://localhost:8080 (docker compose up); homolog/prod = valor do Parameter Store /oficina/{env}/services/os/api-url. Massa de teste local (Wiremock): CPF 12345678900 + placa ABC1D23 (caminho feliz), CPF 99999999999 (cliente inativo), placa XYZ9K88 (veículo de outro cliente). Rode as requisições na ordem.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "osId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health/live" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('200', () => pm.response.to.have.status(200));"] } }]
+        },
+        {
+          "name": "Readiness",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health/ready" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('200', () => pm.response.to.have.status(200));"] } }]
+        }
+      ]
+    },
+    {
+      "name": "Ordens de Serviço",
+      "item": [
+        {
+          "name": "Abrir OS (caminho feliz)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/ordens-servico",
+            "body": { "mode": "raw", "raw": "{\n  \"cpf\": \"12345678900\",\n  \"placa\": \"ABC1D23\",\n  \"defeitoRelatado\": \"Barulho no motor\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('201 Created', () => pm.response.to.have.status(201));",
+            "const os = pm.response.json();",
+            "pm.test('status inicial AguardandoDiagnostico', () => pm.expect(os.status).to.eql('AguardandoDiagnostico'));",
+            "pm.collectionVariables.set('osId', os.id);"
+          ] } }]
+        },
+        {
+          "name": "Abrir OS — cliente inativo (403)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/ordens-servico",
+            "body": { "mode": "raw", "raw": "{\n  \"cpf\": \"99999999999\",\n  \"placa\": \"ABC1D23\",\n  \"defeitoRelatado\": \"x\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('403', () => pm.response.to.have.status(403));"] } }]
+        },
+        {
+          "name": "Abrir OS — cliente inexistente (404)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/ordens-servico",
+            "body": { "mode": "raw", "raw": "{\n  \"cpf\": \"00000000000\",\n  \"placa\": \"ABC1D23\",\n  \"defeitoRelatado\": \"x\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('404', () => pm.response.to.have.status(404));"] } }]
+        },
+        {
+          "name": "Abrir OS — veículo de outro cliente (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/ordens-servico",
+            "body": { "mode": "raw", "raw": "{\n  \"cpf\": \"12345678900\",\n  \"placa\": \"XYZ9K88\",\n  \"defeitoRelatado\": \"x\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }]
+        },
+        {
+          "name": "Listar OSes (filtro por status)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/ordens-servico?status=AguardandoDiagnostico", "host": ["{{baseUrl}}"], "path": ["ordens-servico"], "query": [{ "key": "status", "value": "AguardandoDiagnostico" }] }
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('200 e lista', () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.be.an('array'); });"] } }]
+        },
+        {
+          "name": "Detalhes da OS",
+          "request": { "method": "GET", "url": "{{baseUrl}}/ordens-servico/{{osId}}" },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('traz ids da Saga (nulos até os eventos chegarem)', () => { const o = pm.response.json(); pm.expect(o).to.have.property('diagnosticoId'); pm.expect(o).to.have.property('orcamentoId'); pm.expect(o).to.have.property('pagamentoId'); });"
+          ] } }]
+        },
+        {
+          "name": "Histórico de status",
+          "request": { "method": "GET", "url": "{{baseUrl}}/ordens-servico/{{osId}}/historico" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('200 e ao menos a criação', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().length).to.be.at.least(1); });"] } }]
+        },
+        {
+          "name": "Cancelar OS (compensação)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/ordens-servico/{{osId}}/cancelar" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('204', () => pm.response.to.have.status(204));"] } }]
+        },
+        {
+          "name": "Cancelar de novo (409)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/ordens-servico/{{osId}}/cancelar" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('409 — estado não permite', () => pm.response.to.have.status(409));"] } }]
+        },
+        {
+          "name": "OS inexistente (404)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/ordens-servico/00000000-0000-0000-0000-000000000000" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('404', () => pm.response.to.have.status(404));"] } }]
+        }
+      ]
+    }
+  ]
+}

@@ -9,18 +9,51 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/oficina-os-service
+  COVERAGE_MINIMO: "80"
 
 jobs:
+  # ─── 1) Build, testes (unitários + BDD), cobertura mínima e qualidade (Sonar) ───
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Sonar precisa do histórico para blame/new code
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      - name: Setup Java (scanner do Sonar)
+        if: ${{ env.SONAR_TOKEN != '' && github.event.pull_request.head.repo.fork != true }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Ferramentas (SonarScanner e ReportGenerator)
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          if [ -n "$SONAR_TOKEN" ]; then dotnet tool install --global dotnet-sonarscanner; fi
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Sonar — início da análise
+        if: ${{ env.SONAR_TOKEN != '' && github.event.pull_request.head.repo.fork != true }}
+        run: |
+          dotnet sonarscanner begin \
+            /k:"$SONAR_PROJECT_KEY" /o:"$SONAR_ORGANIZATION" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.cs.opencover.reportsPaths="coverage/**/coverage.opencover.xml" \
+            /d:sonar.exclusions="**/Migrations/**" \
+            /d:sonar.coverage.exclusions="**/Migrations/**,**/Program.cs,tests/**" \
+            /d:sonar.qualitygate.wait=true
 
       - name: Restore
         run: dotnet restore OficinaOs.slnx
@@ -28,15 +61,37 @@ jobs:
       - name: Build
         run: dotnet build OficinaOs.slnx --no-restore --configuration Release
 
-      - name: Test (com cobertura)
-        run: dotnet test OficinaOs.slnx --no-build --configuration Release --settings coverlet.runsettings --collect:"XPlat Code Coverage" --results-directory ./coverage
+      - name: Testes unitários e BDD (com cobertura)
+        run: >
+          dotnet test OficinaOs.slnx --no-build --configuration Release
+          --settings coverlet.runsettings --collect:"XPlat Code Coverage"
+          --results-directory ./coverage --logger "trx;LogFileName=resultados.trx"
 
-      - name: Publicar cobertura
+      - name: Sonar — fim da análise e quality gate
+        if: ${{ env.SONAR_TOKEN != '' && github.event.pull_request.head.repo.fork != true }}
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+      - name: Relatório de cobertura e gate mínimo
+        run: |
+          reportgenerator -reports:"coverage/**/coverage.cobertura.xml" -targetdir:coverage/report \
+            -reporttypes:"TextSummary;MarkdownSummaryGithub;Cobertura"
+          cat coverage/report/Summary.txt
+          cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+          LINHAS=$(grep -oP 'Line coverage: \K[0-9.]+' coverage/report/Summary.txt | head -1)
+          echo "Cobertura de linhas: ${LINHAS}% (mínimo ${COVERAGE_MINIMO}%)"
+          awk -v c="$LINHAS" -v m="$COVERAGE_MINIMO" 'BEGIN { exit (c+0 >= m+0) ? 0 : 1 }' \
+            || { echo "::error::Cobertura ${LINHAS}% abaixo do mínimo de ${COVERAGE_MINIMO}%"; exit 1; }
+
+      - name: Publicar cobertura e resultados
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage
-          path: coverage/**/coverage.cobertura.xml
+          name: cobertura-e-testes
+          path: |
+            coverage/report/
+            coverage/**/resultados.trx
 
+  # ─── 2) Imagem Docker (só na main) ───
   build-docker:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -45,6 +100,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -71,3 +128,42 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Referência da imagem (tag imutável do commit)
+        id: ref
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=${REGISTRY}/${OWNER}/oficina-os-service:sha-$(echo ${GITHUB_SHA} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+  # ─── 3) Deploy automático em homolog (Kubernetes) ───
+  # Fica DESLIGADO até a variável do repositório DEPLOY_HOMOLOG=true e os secrets AWS_* estarem configurados
+  # (as credenciais do AWS Academy expiram em ~4h: para deploy sob demanda use o workflow "Deploy" manual).
+  deploy-homolog:
+    name: Deploy Kubernetes (homolog)
+    runs-on: ubuntu-latest
+    needs: build-docker
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_HOMOLOG == 'true' }}
+    environment: homolog
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credenciais AWS (Academy)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Deploy
+        env:
+          IMAGE: ${{ needs.build-docker.outputs.image }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+        run: ./scripts/deploy-k8s.sh homolog

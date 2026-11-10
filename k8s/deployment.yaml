@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oficina-os-service
+  namespace: oficina
+  labels:
+    app.kubernetes.io/name: os-service
+    app.kubernetes.io/component: orquestrador-saga
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: os-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: os-service
+        app.kubernetes.io/component: orquestrador-saga
+        app.kubernetes.io/part-of: oficina-mecanica
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      volumes:
+        - name: newrelic-instrumentation
+          emptyDir: {}
+      initContainers:
+        # Mesmo padrão do oficina-infra-k8s (API da Fase 3): copia o agente .NET do New Relic para um volume
+        # compartilhado, sem instalar nada na imagem do serviço.
+        - name: newrelic-agent-init
+          image: newrelic/newrelic-dotnet-init:10.54.0.0
+          command: ["sh", "-c", "cp -a /instrumentation/. /newrelic-instrumentation/ && chown -R 999:999 /newrelic-instrumentation"]
+          volumeMounts:
+            - name: newrelic-instrumentation
+              mountPath: /newrelic-instrumentation
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+      containers:
+        - name: os-service
+          # Substituído por scripts/deploy-k8s.sh (tag imutável sha-xxxxxxx publicada pelo CI).
+          image: ${IMAGE}
+          ports:
+            - containerPort: 5000
+              name: http
+          volumeMounts:
+            - name: newrelic-instrumentation
+              mountPath: /newrelic-instrumentation
+          envFrom:
+            - configMapRef:
+                name: os-service-config
+            - secretRef:
+                name: os-service-secrets
+          env:
+            # Profiler .NET do New Relic (APM + traces distribuídos). Sem NEW_RELIC_LICENSE_KEY o agente
+            # carrega mas não reporta; não impede o serviço de rodar.
+            - name: CORECLR_ENABLE_PROFILING
+              value: "1"
+            - name: CORECLR_PROFILER
+              value: "{36032161-FFC0-4B61-B559-F6C5D41BAE5A}"
+            - name: CORECLR_PROFILER_PATH
+              value: /newrelic-instrumentation/libNewRelicProfiler.so
+            - name: CORECLR_NEWRELIC_HOME
+              value: /newrelic-instrumentation
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
