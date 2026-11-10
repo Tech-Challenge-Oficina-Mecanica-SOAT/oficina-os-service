@@ -1,0 +1,14 @@
+{
+  "request": { "method": "GET", "urlPath": "/clientes/cpf/12345678900" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "nome": "Joao Silva",
+      "cpf": "12345678900",
+      "email": "joao@teste.com",
+      "ativo": true
+    }
+  }
+}
