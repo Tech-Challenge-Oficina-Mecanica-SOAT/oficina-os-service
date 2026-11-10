@@ -139,6 +139,40 @@ namespace OficinaOs.Infrastructure.Persistence.Migrations
                     b.ToTable("ordem_servico_itens", (string)null);
                 });
 
+            modelBuilder.Entity("OficinaOs.Infrastructure.Messaging.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcessedAt", "OccurredAt");
+
+                    b.ToTable("outbox_events", (string)null);
+                });
+
             modelBuilder.Entity("OficinaOs.Domain.Entities.HistoricoStatusOS", b =>
                 {
                     b.HasOne("OficinaOs.Domain.Entities.OrdemServico", null)
