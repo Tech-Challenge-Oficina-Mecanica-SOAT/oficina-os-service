@@ -1,7 +1,15 @@
 name: Deploy
 
-# Deploy manual (homolog ou prod) de uma imagem já publicada pelo CI.
+# Deploy de uma imagem já publicada pelo CI (que já rodou build, testes, cobertura e Sonar).
+#  - Automático: após o CI/CD da `main` terminar com sucesso, publica o commit em homolog.
+#    Só roda se a variável do repositório AUTO_DEPLOY for "true" (as credenciais do AWS Academy expiram em ~4h,
+#    então o automático fica desligado até o ambiente estar de pé e os secrets atualizados).
+#  - Manual: workflow_dispatch (homolog ou prod, com a tag desejada).
 on:
+  workflow_run:
+    workflows: ["CI/CD"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
@@ -17,13 +25,18 @@ on:
 
 jobs:
   deploy:
-    name: Deploy Kubernetes (${{ inputs.environment }})
+    name: Deploy Kubernetes (${{ inputs.environment || 'homolog' }})
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && vars.AUTO_DEPLOY == 'true')
+    environment: ${{ inputs.environment || 'homolog' }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Credenciais AWS (Academy)
         uses: aws-actions/configure-aws-credentials@v4
@@ -37,9 +50,9 @@ jobs:
 
       - name: Deploy
         env:
-          IMAGE: ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:${{ inputs.image_tag }}
+          IMAGE: ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:${{ inputs.image_tag || format('sha-{0}', substr(github.event.workflow_run.head_sha, 0, 7)) }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
           AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-        run: ./scripts/deploy-k8s.sh ${{ inputs.environment }}
+        run: ./scripts/deploy-k8s.sh ${{ inputs.environment || 'homolog' }}
