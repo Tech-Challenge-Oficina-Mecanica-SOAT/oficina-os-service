@@ -56,11 +56,15 @@ IMAGE=ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:latest ./s
 - **Cluster**: a Fase 3 roda em 1 node `t3.small` (limite de ~11 pods). Um segundo serviço + New Relic ocupam pods: conferir `kubectl get pods -A`.
 
 ### ⚠ Permissões AWS dos pods (AWS Academy)
-Os pods usam a role do node (`LabEksNodeRole`), que provavelmente **não permite SNS, SQS nem SSM**. Sintoma: o pod sobe, mas o log mostra
-`AccessDenied` ao publicar/consumir, e o evento fica pendente em `outbox_events`. Duas saídas:
-1. **(já suportada)** exportar `AWS_SESSION_TOKEN` ao rodar o script: as credenciais da sessão do Academy são injetadas no Secret do pod.
-   Expiram com a sessão: rode o deploy de novo para renovar.
-2. Trocar a role do node group para a `LabRole` (mudança no `oficina-infra-k8s`, decisão do grupo).
+Os pods usam a role do node (`LabEksNodeRole`); o Academy não permite anexar policy a ela nem IRSA. O caminho adotado (o mesmo do Cadastros):
+1. **Policy de recurso** (`terraform/iam.tf` e `sqs.tf`): os tópicos `os.criada`/`os.cancelada` aceitam `sns:Publish` da role do node e a fila aceita
+   o consumo dela. Exige o **limite de salto 2 do IMDS** no node group (já na `main` do `oficina-infra-k8s`).
+2. **SSM não tem policy de recurso:** o `deploy-k8s.sh` resolve os ARNs dos tópicos e a URL da fila com a sessão de quem faz o deploy e os passa
+   ao pod por variável (`Messaging__TopicArns__*`, `Messaging__QueueUrl`). Rode o `terraform apply` **antes** do deploy.
+3. **Fallback:** `INJECT_AWS_CREDENTIALS=true ./scripts/deploy-k8s.sh homolog` injeta as credenciais da sessão no Secret do pod (como a Execução faz);
+   expiram com a sessão (~4h), então rode o deploy de novo para renovar.
+
+Sintoma de permissão faltando: o pod sobe, mas o log mostra `AccessDenied` e o evento fica pendente em `outbox_events`.
 
 ## 4. Observabilidade (New Relic)
 - O deployment injeta o agente .NET por init container (`newrelic/newrelic-dotnet-init`), igual à API da Fase 3. App name: `oficina-os-service`.

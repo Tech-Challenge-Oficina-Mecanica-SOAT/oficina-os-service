@@ -12,10 +12,11 @@
 #   OS_DB_USER / OS_DB_PASSWORD   credenciais do banco da OS; se vazios, usa as do RDS compartilhado (SSM + Secrets Manager)
 #   CADASTROS_URL          URL do Cadastros; se vazia, lê o Parameter Store /oficina/{env}/services/cadastros/api-url
 #
-# ATENÇÃO (IAM do AWS Academy): os pods herdam a role do node (LabEksNodeRole), que pode NÃO ter permissão de
-# SNS/SQS/SSM. Se AWS_SESSION_TOKEN estiver definido, as credenciais da sessão são injetadas no Secret do pod
-# (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN). Elas expiram junto com a sessão do Academy:
-# rode este script de novo para renová-las.
+# IAM do AWS Academy: os pods herdam a role do node (LabEksNodeRole). SNS e SQS são liberados por policy de recurso
+# (terraform/iam.tf e sqs.tf); SSM não tem policy de recurso, então ARNs e URL da fila vão por variável (abaixo).
+# FALLBACK (opt-in): INJECT_AWS_CREDENTIALS=true injeta as credenciais da sessão no Secret do pod
+# (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN), como a Execução faz. Use se o terraform/ do OS
+# ainda não foi aplicado. Elas expiram junto com a sessão do Academy: rode este script de novo para renová-las.
 set -euo pipefail
 
 ENVIRONMENT=${1:-homolog}
@@ -55,14 +56,27 @@ SECRET_ARGS=(
   --from-literal=ConnectionStrings__Default="$CONNECTION_STRING"
   --from-literal=NEW_RELIC_LICENSE_KEY="${NEW_RELIC_LICENSE_KEY:-}"
 )
-if [ -n "${AWS_SESSION_TOKEN:-}" ]; then
+if [ "${INJECT_AWS_CREDENTIALS:-false}" = "true" ]; then
   echo "Injetando credenciais da sessão AWS no Secret (expiram com a sessão do Academy)."
   SECRET_ARGS+=(
     --from-literal=AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:?}"
     --from-literal=AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:?}"
-    --from-literal=AWS_SESSION_TOKEN="$AWS_SESSION_TOKEN"
+    --from-literal=AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:?}"
   )
 fi
+# --- Mensageria sem SSM no pod (a LabEksNodeRole não tem SSM e SSM não tem policy de recurso) -----------
+# Os ARNs dos tópicos e a URL da fila são resolvidos AQUI, com a sessão de quem faz o deploy, e vão por variável.
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+for EVT in os.criada os.cancelada; do
+  ARN=$(ssm "/oficina/$ENVIRONMENT/messaging/topics/$EVT/arn" 2>/dev/null || true)
+  if [ -z "$ARN" ] || [ "$ARN" = "None" ]; then
+    echo "AVISO: ARN do tópico $EVT não encontrado no SSM. Rode o terraform/ do OS (cria os tópicos) antes do deploy." >&2
+  else
+    SECRET_ARGS+=(--from-literal="Messaging__TopicArns__$EVT=$ARN")
+  fi
+done
+SECRET_ARGS+=(--from-literal=Messaging__QueueUrl="https://sqs.${AWS_DEFAULT_REGION}.amazonaws.com/${ACCOUNT_ID}/oficina-${ENVIRONMENT}-os-queue")
+
 kubectl create secret generic os-service-secrets --namespace "$NS" "${SECRET_ARGS[@]}" \
   --dry-run=client -o yaml | kubectl apply -f -
 

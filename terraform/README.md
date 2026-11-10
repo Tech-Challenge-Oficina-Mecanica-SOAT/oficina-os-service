@@ -18,4 +18,6 @@ O database lógico `oficina_os` e a role PostgreSQL ainda não estão aqui: depe
 ## Fila e DLQ (etapa 5)
 
 `sqs.tf` cria `oficina-{env}-os-queue` (+ `oficina-{env}-os-dlq`, 3 tentativas), a policy que deixa os tópicos publicarem na fila e as subscriptions (`raw_message_delivery = true`) lendo os ARNs no Parameter Store.
+
+`iam.tf` e a policy da fila dão aos pods (role do node, `LabEksNodeRole`, variável `node_role_name`) `sns:Publish` nos tópicos do OS e o consumo da fila, por **policy de recurso** (o Academy não permite anexar policy à role nem IRSA; mesmo padrão do Cadastros). Exige o limite de salto 2 do IMDS no node group. O SSM não tem policy de recurso: o `scripts/deploy-k8s.sh` resolve os ARNs e a URL da fila e os passa por variável de ambiente.
 O `apply` exige que os tópicos dos outros serviços já existam; enquanto isso, restrinja: `terraform apply -var environment=homolog -var 'consumed_events=["diagnostico.concluido"]'`.

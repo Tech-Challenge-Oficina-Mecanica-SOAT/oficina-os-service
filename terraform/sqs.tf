@@ -30,33 +30,52 @@ resource "aws_sqs_queue" "os" {
   tags = local.tags
 }
 
-# Permite que os tópicos publiquem na fila (sem isso o SNS não entrega e nada chega, sem erro visível).
+# Policy da fila: (1) os tópicos publicam na fila (sem isso o SNS não entrega e nada chega, sem erro visível);
+# (2) os pods (role do node) consomem a fila — policy de recurso, pois não dá para anexar policy à LabEksNodeRole.
 data "aws_iam_policy_document" "os_queue" {
-  count = length(var.consumed_events) > 0 ? 1 : 0
+  dynamic "statement" {
+    for_each = length(var.consumed_events) > 0 ? [1] : []
+    content {
+      sid       = "AllowSnsTopicsToSend"
+      effect    = "Allow"
+      actions   = ["sqs:SendMessage"]
+      resources = [aws_sqs_queue.os.arn]
+
+      principals {
+        type        = "Service"
+        identifiers = ["sns.amazonaws.com"]
+      }
+
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = [for p in data.aws_ssm_parameter.consumed_topic : p.value]
+      }
+    }
+  }
 
   statement {
-    sid       = "AllowSnsTopicsToSend"
-    effect    = "Allow"
-    actions   = ["sqs:SendMessage"]
+    sid    = "PodsDoClusterConsomem"
+    effect = "Allow"
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:ChangeMessageVisibility",
+      "sqs:GetQueueAttributes",
+      "sqs:GetQueueUrl",
+    ]
     resources = [aws_sqs_queue.os.arn]
 
     principals {
-      type        = "Service"
-      identifiers = ["sns.amazonaws.com"]
-    }
-
-    condition {
-      test     = "ArnEquals"
-      variable = "aws:SourceArn"
-      values   = [for p in data.aws_ssm_parameter.consumed_topic : p.value]
+      type        = "AWS"
+      identifiers = [data.aws_iam_role.node.arn]
     }
   }
 }
 
 resource "aws_sqs_queue_policy" "os" {
-  count     = length(var.consumed_events) > 0 ? 1 : 0
   queue_url = aws_sqs_queue.os.id
-  policy    = data.aws_iam_policy_document.os_queue[0].json
+  policy    = data.aws_iam_policy_document.os_queue.json
 }
 
 # raw_message_delivery = true: o corpo da mensagem na fila é o envelope direto (não embrulhado pelo SNS).
