@@ -67,14 +67,16 @@ Os pods usam a role do node (`LabEksNodeRole`); o Academy não permite anexar po
 
 Sintoma de permissão faltando: o pod sobe, mas o log mostra `AccessDenied` e o evento fica pendente em `outbox_events`.
 
-### Service interno opcional (sem NLB público)
-Por padrão o script aplica `k8s/service.yaml` (NLB internet-facing), espera o hostname e publica `http://<nlb>` em `/oficina/{env}/services/os/api-url`.
-Com `OS_SERVICE_INTERNAL=true` ele aplica `k8s/service-internal.yaml` (ClusterIP, mesmo nome `oficina-os-service`, porta 80 para 5000), não espera o NLB
-e publica `http://oficina-os-service.oficina.svc.cluster.local` no mesmo parâmetro, mantendo o contrato para os outros serviços:
+### Service interno (padrão) ou NLB
+Por padrão (`OS_SERVICE_INTERNAL=true`) o script aplica `k8s/service-internal.yaml` (ClusterIP, nome `oficina-os-service`, porta 80 para 5000), não espera NLB
+e publica `http://oficina-os-service.oficina.svc.cluster.local` em `/oficina/{env}/services/os/api-url`. É o endereço que o Billing usa (`Services__OsService__BaseUrl`).
+Para acessar de fora (demo/vídeo): `kubectl port-forward svc/oficina-os-service 8080:80 -n oficina`.
+
+Com `OS_SERVICE_INTERNAL=false` volta ao `k8s/service.yaml` (NLB internet-facing): espera o hostname e publica `http://<nlb>` no mesmo parâmetro.
 ```bash
-OS_SERVICE_INTERNAL=true IMAGE=ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:latest ./scripts/deploy-k8s.sh homolog
+OS_SERVICE_INTERNAL=false IMAGE=ghcr.io/tech-challenge-oficina-mecanica-soat/oficina-os-service:latest ./scripts/deploy-k8s.sh homolog
 ```
-Sem a variável, nada muda.
+Se o Service já existia como LoadBalancer e o `kubectl apply` reclamar da troca de tipo: `kubectl delete svc oficina-os-service -n oficina` e rode o deploy de novo.
 
 ### Primeira subida em uma conta nova
 Há uma dependência circular entre os terraforms: a fila do OS assina por padrão os tópicos do Billing (`orcamento.*`, `pagamento.*`), que só existem
