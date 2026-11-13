@@ -15,7 +15,7 @@ abrir_os "Freio com ruido"  # sem acento: o curl do Windows envia ANSI e a API (
 step "Execução conclui o diagnóstico — o MESMO evento é entregue 3 vezes (SQS entrega pelo menos uma vez)"
 # eventId NOVO a cada execução (um fixo seria deduplicado na 2a vez). /proc não existe no Git Bash do Windows,
 # então tenta o container do LocalStack e cai para $RANDOM.
-EVENT_ID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || docker compose exec -T localstack cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '' || true)
+EVENT_ID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || docker compose exec -T localstack cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '\r' || true)
 [ -n "$EVENT_ID" ] || EVENT_ID=$(printf '%04x%04x-%04x-4%03x-a%03x-%04x%04x%04x' $RANDOM $RANDOM $RANDOM $((RANDOM % 4096)) $((RANDOM % 4096)) $RANDOM $RANDOM $RANDOM)
 for _ in 1 2 3; do
   "$(dirname "$0")/fake-event.sh" diagnostico.concluido "{\"osId\":\"$OS_ID\",\"diagnosticoId\":\"$DIAG\"}" "$EVENT_ID" >/dev/null
