@@ -1,4 +1,4 @@
-# Variante opt-in (OS_SERVICE_INTERNAL=true no scripts/deploy-k8s.sh): Service interno, sem NLB.
+# Service padrão do scripts/deploy-k8s.sh (OS_SERVICE_INTERNAL=true): interno, sem NLB. O Billing chama este DNS.
 # Mesmo nome e porta do k8s/service.yaml, então o DNS do cluster continua o mesmo.
 apiVersion: v1
 kind: Service
