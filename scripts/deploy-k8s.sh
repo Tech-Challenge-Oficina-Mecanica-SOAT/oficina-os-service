@@ -11,8 +11,8 @@
 #   OS_DB_NAME             database lógico da OS (padrão: oficina_os) — criado sozinho pelo EF Migrate no 1º start (usuário admin)
 #   OS_DB_USER / OS_DB_PASSWORD   credenciais do banco da OS; se vazios, usa as do RDS compartilhado (SSM + Secrets Manager)
 #   CADASTROS_URL          URL do Cadastros; se vazia, lê o Parameter Store /oficina/{env}/services/cadastros/api-url
-#   OS_SERVICE_INTERNAL    true = Service ClusterIP (k8s/service-internal.yaml), sem NLB público: não espera o NLB e publica
-#                          http://oficina-os-service.oficina.svc.cluster.local no SSM (padrão: false = NLB internet-facing)
+#   OS_SERVICE_INTERNAL    padrao true = Service ClusterIP (k8s/service-internal.yaml), sem NLB: e o que o Billing espera
+#                          (http://oficina-os-service.oficina.svc.cluster.local). false = NLB internet-facing (k8s/service.yaml)
 #
 # IAM do AWS Academy: os pods herdam a role do node (LabEksNodeRole). SNS e SQS são liberados por policy de recurso
 # (terraform/iam.tf e sqs.tf); SSM não tem policy de recurso, então ARNs e URL da fila vão por variável (abaixo).
@@ -42,7 +42,7 @@ if [ -z "${CADASTROS_URL:-}" ]; then
 fi
 if [ -z "${CADASTROS_URL:-}" ]; then
   echo "AVISO: URL do Cadastros não encontrada (SSM /oficina/$ENVIRONMENT/services/cadastros/api-url). Abrir OS vai responder 503 até configurar." >&2
-  CADASTROS_URL="http://cadastros-service.${NS}"
+  CADASTROS_URL="http://oficina-cadastros-service.${NS}.svc.cluster.local"
 fi
 
 # --- Banco -------------------------------------------------------------------------------------------
@@ -95,7 +95,7 @@ fi
 export ENVIRONMENT CADASTROS_URL IMAGE
 envsubst '${ENVIRONMENT} ${CADASTROS_URL}' < k8s/configmap.yaml | kubectl apply -f -
 envsubst '${IMAGE}' < k8s/deployment.yaml | kubectl apply -f -
-if [ "${OS_SERVICE_INTERNAL:-false}" = "true" ]; then
+if [ "${OS_SERVICE_INTERNAL:-true}" = "true" ]; then
   kubectl apply -f k8s/service-internal.yaml -f k8s/hpa.yaml
 else
   kubectl apply -f k8s/service.yaml -f k8s/hpa.yaml
@@ -106,7 +106,7 @@ kubectl rollout restart deployment/oficina-os-service -n "$NS"
 kubectl rollout status deployment/oficina-os-service -n "$NS" --timeout=5m
 
 # --- Publica o endpoint para Billing/Execução (contratos/eventos/schemas.md) ---------------------------
-if [ "${OS_SERVICE_INTERNAL:-false}" = "true" ]; then
+if [ "${OS_SERVICE_INTERNAL:-true}" = "true" ]; then
   # Sem NLB: o contrato do SSM é mantido, apontando para o DNS interno do Service.
   SERVICE_URL="http://oficina-os-service.${NS}.svc.cluster.local"
 else
